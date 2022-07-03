@@ -2,49 +2,9 @@ Fala pessoal, tudo joia?!
 
 Aqui está algumas questões resolvidas usando a linguagem SQL no SGBD PostgreSQL.
 Nessa ativiade foram colocados em prática conhecimentos sobre Stored procedure, Trigger e 
-Rules.
+Rules. Essa avaliação foi proposta pela professora da disciplina Programação para Banco de Dados.
 
-Dada as tabelas abaixo, faça as inserções nas mesmas para responder as questões:
-
-create table clientes (
-    codigo serial not null primary key,
-    nome varchar(50) not null check (length(nome) > 0),
-    endereco varchar(40) not null,
-    cidade varchar(30) not null,
-    estado char(2) not null,
-    cep int not null check (cep > 1000)
-);
-
-create table produtos (
-    codigo serial not null primary key,
-    descricao varchar(50) not null,
-    perecivel boolean not null default FALSE,
-    validade date default (current_date+15),
-    detalhes text,
-    foto bytea,
-    unique (descricao),
-    valor numeric (10,3),
-    check (validade > current_date),
-    check ((perecivel AND validade is not null) or (not perecivel AND validade is null))
-);
-
-create table vendas (
-    codigo int not null,
-    cliente int not null,
-    primary key (codigo, cliente),
-    foreign key (cliente) references clientes (codigo)
-);
-
-create table produtos_venda (
-    venda int not null,
-    cliente int not null,
-    produto int not null,
-    quant int check (quant > 0),
-    primary key (venda, cliente, produto),
-    foreign key (venda, cliente) references vendas (codigo, cliente),
-    foreign key (produto) references produtos (codigo)
-);
-
+Segue as questões:
 
  1) - Mostrar o nome do cliente, nome do produto, os valores totais do produto
 agrupados por cliente pesquisados na tabela produtos_venda.
@@ -73,4 +33,7 @@ hora.
  7) - Criar uma regra que ao ser alterada, ou deletado, na tabela venda não seja
 realizado a operação solicitada, e guardar dados que seriam alterados, usuário e hora.
 
+
+A professora disponiblizou uma Database com as tabelas necessárias, ficando 
+para estudante fazer as inserções e as questões.
 
