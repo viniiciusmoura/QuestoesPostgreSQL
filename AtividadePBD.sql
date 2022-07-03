@@ -63,7 +63,8 @@ INSERT INTO PRODUTOS_VENDA VALUES(2,2,3,5);
 
 
 
-/*1)Mostrar o nome do cliente, nome do produto, os valores totais do produto
+/*
+1)Mostrar o nome do cliente, nome do produto, os valores totais do produto
 agrupados por cliente pesquisados na tabela produtos_venda.*/
 
 SELECT C.NOME, P.DESCRICAO, (P.VALOR*PV.QUANT) AS "TOTAL DA VENDA" FROM CLIENTES C
@@ -71,53 +72,74 @@ INNER JOIN VENDAS VE ON C.CODIGO=VE.CLIENTE
 INNER JOIN PRODUTOS_VENDA PV ON VE.CODIGO=PV.VENDA AND VE.CLIENTE=PV.CLIENTE
 INNER JOIN PRODUTOS P ON PV.PRODUTO=P.CODIGO WHERE PV.CLIENTE=2;
 
+/*
+2)Criar uma função para inserir um produto não perecível na tabela de produtos.
+A função deverá receber a descrição do produto como parâmetro e retornar o código do
+produto inserido.
+*/
+
+CREATE OR REPLACE FUNCTION inserirProdutoNaoPerecivel(des text) RETURNS INT AS
+$$
+DECLARE
+	id int;
+BEGIN
+	INSERT INTO PRODUTOS(descricao,perecivel,validade,detalhes,foto,valor) VALUES(des,false,null,null,null,0.00) returning codigo into id;
+	RETURN id;
+END;
+$$
+LANGUAGE 'plpgsql';
+
+SELECT inserirprodutonaoperecivel('macarrão');
+
 
 /*
-4)Criar uma função para inserir um produto perecível na tabela de produtos. A
+3)Criar uma função para inserir um produto perecível na tabela de produtos. A
 função deverá receber a descrição do produto e a data de validade como parâmetros e
 retornar o registro inserido.*/
 
-CREATE OR REPLACE FUNCTION INSERIRPERECIVEL(des text, datav date) RETURNS INT AS
+CREATE OR REPLACE FUNCTION inserirProdutoPerecivel(des text, datav date) RETURNS SETOF produtos AS
 $$
-declare 
-	id int;
-begin
-	if datav is not null then
-		INSERT INTO PRODUTOS(descricao,perecivel,validade,detalhes,foto,valor) VALUES(des,true,datav,null,null,25.03) returning codigo into id;
-	end if;
-	return id;
-end;
+DECLARE
+	registroinsert produtos%ROWTYPE;
+BEGIN
+	IF datav IS NOT null THEN
+		INSERT INTO PRODUTOS(descricao,perecivel,validade,detalhes,foto,valor) VALUES(des,true,datav,null,null,25.03) returning codigo,descricao,perecivel,validade,detalhes,foto,valor into registroinsert;
+		RETURN NEXT registroinsert;
+	END IF;
+END;
 $$
 LANGUAGE 'plpgsql';
 
-select * from INSERIRPERECIVEL('alface','2022-07-15');
-select * from INSERIRPERECIVEL('alface',null);
+SELECT * FROM produtos;
+SELECT * from inserirprodutoperecivel('Tomate','2022-07-25');
+SELECT * from inserirprodutoperecivel('Alface',null);
 
-/*5) Criar uma função para excluir todos os produtos que não estiverem presentes
+
+/*
+4) Criar uma função para excluir todos os produtos que não estiverem presentes
 em nenhuma venda, isto é, aqueles que não são usados na tabela produtos_venda.*/
 
-CREATE OR REPLACE FUNCTION EXLUIRPRODS() returns void as
+CREATE OR REPLACE FUNCTION excluirProdutos() returns void as
 $$
-begin
+BEGIN
 	DELETE FROM PRODUTOS WHERE CODIGO NOT IN (SELECT PRODUTO FROM PRODUTOS_VENDA);
-end;
+END;
 $$
 LANGUAGE 'plpgsql';
 
-SELECT EXLUIRPRODS();
+SELECT excluirProdutos();
+SELECT * FROM produtos;
 
-SELECT * FROM PRODUTOS;
-
-
-/*6)Criar uma trigger que ao ser alterada, ou deletado, na tabela produtos_venda
+/*
+5)Criar uma trigger que ao ser alterada, ou deletado, na tabela produtos_venda
 seja guardado em uma nova tabela qual operação foi realizada, os dados alterados, usuário e
 hora.*/
 
-
-create table produtos_venda_audit (
-operacao text,
-dataop timestamp,
-usuario varchar,
+--TABELA DE AUDITORIA
+CREATE TABLE produtos_venda_audit (
+operacao text not null,
+dataop timestamp not null,
+usuario varchar not null,
 venda int not null,
 cliente int not null,
 produto int not null,
@@ -125,66 +147,54 @@ quant int check (quant > 0),
 foreign key (venda, cliente) references vendas (codigo, cliente),
 foreign key (produto) references produtos (codigo));
 
-select * from produtos_venda_audit;
+SELECT * FROM produtos_venda_audit;
 
-create or replace function audiprodvenda() returns trigger as
+CREATE OR REPLACE FUNCTION auditProdudoVenda() RETURNS TRIGGER AS
 $$
 BEGIN
-	if (TG_OP='DELETE') then
-		insert into produtos_venda_audit select 'DELETE',now(),user,old.*;
-	elseif (TG_OP='UPDATE') then
-		insert into produtos_venda_audit select 'UPDATE',now(),user,new.*;
-	end if;
-	return null;
+	IF (TG_OP='DELETE') THEN
+		INSERT INTO produtos_venda_audit SELECT 'DELETE',now(),user,old.*;
+	ELSE
+		INSERT INTO produtos_venda_audit SELECT 'UPDATE',now(),user,old.*;
+	END IF;
+	RETURN null;
 END;
 $$
 language 'plpgsql';
 
-create or replace trigger prod_audit after update or delete on produtos_venda
-for each row execute procedure audiprodvenda();
-
+CREATE OR REPLACE TRIGGER prod_audit AFTER UPDATE OR DELETE ON produtos_venda
+FOR EACH ROW EXECUTE PROCEDURE auditProdudoVenda();
 
 SELECT * FROM PRODUTOS_VENDA;
-update PRODUTOS_VENDA set produto=11 where venda=2;
+UPDATE PRODUTOS_VENDA SET quant=20 WHERE venda=2;
+DELETE FROM PRODUTOS_VENDA WHERE venda=2;
+--TABELAS DE AUDITORIA
+SELECT * FROM produtos_venda_audit;
 
 /*
-7)Criar uma regra que ao ser alterada, ou deletado, na tabela venda não seja
+6)Criar uma regra que ao ser alterada, ou deletado, na tabela venda não seja
 realizado a operação solicitada, e guardar dados que seriam alterados, usuário e hora.*/
 
-create table vendas_audit (
-horadata timestamp,
-usuario varchar,
+CREATE TABLE vendas_audit (
+horadata timestamp not null,
+usuario varchar not null,
+operacao varchar not null,
 codigo int not null,
 cliente int not null,
 foreign key (cliente) references clientes (codigo));
 
-
-CREATE RULE vendaupdate AS ON UPDATE TO vendas
+CREATE RULE vendaUpdate AS ON UPDATE TO vendas
             DO INSTEAD INSERT INTO vendas_audit
-            VALUES (NOW(),CURRENT_USER, NEW.codigo,new.cliente);
+            VALUES (NOW(),CURRENT_USER,'UPDATE',NEW.codigo,new.cliente);
 			
-CREATE RULE vendadelete AS ON DELETE TO vendas
+CREATE RULE vendaDelete AS ON DELETE TO vendas
             DO INSTEAD INSERT INTO vendas_audit
-            VALUES (NOW(),CURRENT_USER, OLD.codigo,OLD.cliente);
+            VALUES (NOW(),CURRENT_USER,'DELETE',OLD.codigo,OLD.cliente);
 
-select * from vendas_audit;
-delete from vendas where cliente=1;
+SELECT * FROM vendas_audit;
+DELETE FROM vendas WHERE cliente=1;
 
 
 
-/*3)*/
-CREATE OR REPLACE FUNCTION INSERIRnaoperi(des text) RETURNS INT AS
-$$
-declare 
-	id int;
-begin
-
-	INSERT INTO PRODUTOS(descricao,perecivel,validade,detalhes,foto,valor) VALUES(des,false,null,null,null,0.00) returning codigo into id;
-	return id;
-end;
-$$
-LANGUAGE 'plpgsql';
-
-select INSERIRnaoperi('produtonperi');
 
 
