@@ -34,6 +34,8 @@ hora.
 realizado a operação solicitada, e guardar dados que seriam alterados, usuário e hora.
 
 
-A professora disponiblizou uma Database com as tabelas necessárias, ficando 
+OBS: A professora disponiblizou uma Database com as tabelas necessárias, ficando 
 para estudante fazer as inserções e as questões.
+
+Confira todo desenvolvimento da atividade no arquivo "atividadePBD.sql"
 
